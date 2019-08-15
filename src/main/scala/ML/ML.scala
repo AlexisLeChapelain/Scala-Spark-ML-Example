@@ -25,7 +25,9 @@ import org.apache.log4j.Level
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.LassoWithSGD
-//import ml.dmlc.xgboost4j.scala.spark.{XGBoostClassifier, XGBoostClassificationModel}
+
+import ml.dmlc.xgboost4j.scala.spark.XGBoostClassifier
+import ml.dmlc.xgboost4j.scala.spark.XGBoostClassificationModel
 
 
 object ML {
@@ -131,6 +133,8 @@ object ML {
 
     val Array(trainingData, testData) = transformed_data.randomSplit(Array(0.7, 0.3))
 
+    val metricsComputer = new ClassificationMetrics().setColumnLabelName("income")
+
 
     val rf = new RandomForestClassifier()
       .setLabelCol("income")
@@ -138,7 +142,17 @@ object ML {
       .setNumTrees(200)
 
     // Train model. This also runs the indexers.
-    val model = rf.fit(trainingData)
+    val rf_model = rf.fit(trainingData)
+
+    // Make predictions.
+    val predictions_rf = rf_model.transform(testData)
+
+    val metrics_rf = metricsComputer.fit(predictions_rf)
+
+    println("")
+    println("Random forest accuracy is:")
+    println(metrics_rf.Accuracy)
+
 
     val lasso = new LinearRegression()
       .setLabelCol("income")
@@ -148,41 +162,29 @@ object ML {
 
     val model_lasso = lasso.fit(trainingData)
 
-    // Make predictions.
-    val predictions_rf = model.transform(testData)
+    val predictions_lasso = model_lasso.transform(testData)
 
-    val predictions = model_lasso.transform(testData)
-
-    print(model_lasso.coefficients)
-
-    predictions.show(5)
-    val predictionsbis = predictions
+    val predictionsbis = predictions_lasso
       .withColumn("prediction", when($"prediction">0.5, 1).otherwise(0))
       .withColumn("prediction", $"prediction"cast("int"))
-    predictionsbis.show(5)
-
-    //val accuracy = predictionsbis.filter(col("income") === col("prediction")).count().toFloat / predictions.count().toFloat
-
-    val metricsComputer = new ClassificationMetrics()
-      .setColumnLabelName("income")
 
     val metricsLasso = metricsComputer.fit(predictionsbis)
 
     val accuracy = metricsLasso.Accuracy()
     println("")
-    println("Accuracy is:")
+    println("Lasso accuracy is:")
     println(accuracy)
 
-    val benchmark = predictions.filter(col("income") === 1).count().toFloat / predictions.count().toFloat
+    //val benchmark = predictions.filter(col("income") === 1).count().toFloat / predictions.count().toFloat
     println("Benchmark is:")
-    println(benchmark)
+    println(metricsLasso.accuracyBenchmark())
 
     val confusionMatrix = metricsLasso.ConfusionMatrix()
     println("")
     println("Confusion Matrix is:")
     println(confusionMatrix)
 
-/*
+
     // Define parameters of the gradient boosting
     val xgbParam  = Map("booster" -> "gbtree",
       "verbosity" -> 3,
@@ -194,31 +196,32 @@ object ML {
       "colsample_bylevel" -> 1,
       "colsample_bynode" -> 1,
       "objective" -> "binary:logistic",
-      "num_round" -> 40)
+      "num_round" -> 100,
+      "train_test_ratio " -> 0.9)
 
     // Create gradient boosting classifier object
     val xgbClassifier = new XGBoostClassifier(xgbParam)
       .setFeaturesCol("features")
       .setLabelCol("income")
-    println("INITIALIZE")
+      .setMissing(0)
 
     val XGBmodel = xgbClassifier.fit(trainingData)
-    println("ESTIMATION")
 
     val predictionsXGB = XGBmodel.transform(testData)
-    println("PREDICTION")
 
+    val metricsXGB = metricsComputer.fit(predictionsXGB)
+/*
     XGBmodel.write.overwrite().save("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
-    //XGBmodel.write.overwrite().save("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
+    XGBmodel.write.overwrite().save("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
     println("SAVED")
 
     val loaded_model = XGBoostClassificationModel.load("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
     print("LOADED")
-
-    val predictionsXGB2 = loaded_model.transform(testData)
-
 */
 
+
+    print("Accuracy XGBoost")
+    print(metricsComputer.Accuracy())
 
     spark.stop()
     println("Done")

@@ -13,7 +13,7 @@ object ClassificationMetrics {
 
     private def getFirstElement(x: Vector): Double =  x(0).toFloat
     private val getFirstElementUDF = udf(getFirstElement _)
-    private var predictions: DataFrame = null
+    private var predictions: DataFrame = _
     private var dataset_size: Float =  0
     private var columnLabelName: String = "label"
     private var columnPredictionName: String = "prediction"
@@ -31,7 +31,7 @@ object ClassificationMetrics {
       this
     }
 
-    def getPrediction: DataFrame = predictions
+    def getPredictionDataFrame: DataFrame = predictions
     def fit(predictionsDF: DataFrame): ClassificationMetricsObject = {
       this.dataset_size = predictionsDF.count().toFloat
       this.predictions = predictionsDF
@@ -55,6 +55,12 @@ object ClassificationMetrics {
       val truePositive: Float = this.predictions.filter((col(columnLabelName) === 1).and(getFirstElementUDF(col("probability")) < threshold)).count().toFloat
       truePositive * gain_true_positive - falsePositive * cost_false_positive
     }
+
+    def accuracyBenchmark() : Float = {
+      val meanAccuracy = predictions.filter(col(columnLabelName) === 1).count().toFloat / predictions.count().toFloat
+      if (meanAccuracy>0.5) meanAccuracy else 1- meanAccuracy
+    }
+
 
   }
 
