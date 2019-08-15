@@ -1,11 +1,12 @@
 package ML
 
+import ClassificationMetrics.ClassificationMetrics
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.sql.functions.lit
-
 import org.apache.spark.ml.feature.Imputer
 import org.apache.spark.ml.feature.OneHotEncoderEstimator
 import org.apache.spark.ml.feature.StringIndexer
@@ -18,9 +19,13 @@ import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
-
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
+
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.regression.LinearRegressionModel
+import org.apache.spark.mllib.regression.LassoWithSGD
+//import ml.dmlc.xgboost4j.scala.spark.{XGBoostClassifier, XGBoostClassificationModel}
 
 
 object ML {
@@ -75,10 +80,9 @@ object ML {
       .withColumn("native_country", when($"native_country".isNull, "unknown").otherwise($"native_country"))
 
     // Test to do here
-    println(census_data_without_null.filter($"native_country".isNull).count())
+    //println(census_data_without_null.filter($"native_country".isNull).count())
     //print(census_data.filter($"native_country"==="nan").count())
-
-    census_data_without_null.printSchema()
+    // census_data_without_null.printSchema()
 
     // Set int column to float + rename column with name like xx.xx + drop useless column
     val census_data_recast = census_data_without_null
@@ -127,6 +131,7 @@ object ML {
 
     val Array(trainingData, testData) = transformed_data.randomSplit(Array(0.7, 0.3))
 
+
     val rf = new RandomForestClassifier()
       .setLabelCol("income")
       .setFeaturesCol("features")
@@ -135,15 +140,81 @@ object ML {
     // Train model. This also runs the indexers.
     val model = rf.fit(trainingData)
 
+    val lasso = new LinearRegression()
+      .setLabelCol("income")
+      .setFeaturesCol("features")
+      .setElasticNetParam(0)
+      .setRegParam(0)
+
+    val model_lasso = lasso.fit(trainingData)
+
     // Make predictions.
-    val predictions = model.transform(testData)
+    val predictions_rf = model.transform(testData)
 
-    //predictions.show(5)
+    val predictions = model_lasso.transform(testData)
 
-    val accuracy = predictions.filter(col("income") === col("prediction")).count().toFloat / predictions.count().toFloat
+    print(model_lasso.coefficients)
+
+    predictions.show(5)
+    val predictionsbis = predictions
+      .withColumn("prediction", when($"prediction">0.5, 1).otherwise(0))
+      .withColumn("prediction", $"prediction"cast("int"))
+    predictionsbis.show(5)
+
+    //val accuracy = predictionsbis.filter(col("income") === col("prediction")).count().toFloat / predictions.count().toFloat
+
+    val metricsComputer = new ClassificationMetrics(predictionsbis).setColumnLabelName("income")
+
+    val accuracy = metricsComputer.Accuracy()
+    println("")
+    println("Accuracy is:")
     println(accuracy)
 
     val benchmark = predictions.filter(col("income") === 1).count().toFloat / predictions.count().toFloat
+    println("Benchmark is:")
+    println(benchmark)
+
+    val confusionMatrix = metricsComputer.ConfusionMatrix()
+    println("")
+    println("Confusion Matrix is:")
+    println(confusionMatrix)
+
+/*
+    // Define parameters of the gradient boosting
+    val xgbParam  = Map("booster" -> "gbtree",
+      "verbosity" -> 3,
+      "eta" -> 0.3,
+      "gamma" -> 0.5,
+      "max_depth" -> 10,
+      "subsample" -> 0.4,
+      "colsample_bytree" -> 0.5,
+      "colsample_bylevel" -> 1,
+      "colsample_bynode" -> 1,
+      "objective" -> "binary:logistic",
+      "num_round" -> 40)
+
+    // Create gradient boosting classifier object
+    val xgbClassifier = new XGBoostClassifier(xgbParam)
+      .setFeaturesCol("features")
+      .setLabelCol("income")
+    println("INITIALIZE")
+
+    val XGBmodel = xgbClassifier.fit(trainingData)
+    println("ESTIMATION")
+
+    val predictionsXGB = XGBmodel.transform(testData)
+    println("PREDICTION")
+
+    XGBmodel.write.overwrite().save("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
+    //XGBmodel.write.overwrite().save("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
+    println("SAVED")
+
+    val loaded_model = XGBoostClassificationModel.load("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
+    print("LOADED")
+
+    val predictionsXGB2 = loaded_model.transform(testData)
+
+*/
 
 
     spark.stop()
