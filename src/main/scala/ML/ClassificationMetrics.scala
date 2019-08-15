@@ -7,26 +7,35 @@ import org.apache.spark.ml.linalg.Vector
 
 object ClassificationMetrics {
 
-  class ClassificationMetrics(val predictions : DataFrame)  {
+  type ClassificationMetricsObject = ClassificationMetrics.ClassificationMetrics
+
+  class ClassificationMetrics  {
 
     private def getFirstElement(x: Vector): Double =  x(0).toFloat
     private val getFirstElementUDF = udf(getFirstElement _)
-    private val dataset_size: Float =  predictions.count().toFloat
-    private var columnLabelName = "label"
-    private var columnPredictionName = "prediction"
-/*
-    def this(columnLabelName : String, columnPredictionName: String) = {
-      this()
-      this.columnLabelName = columnLabelName
-      this.columnPredictionName = columnPredictionName
-    }
-*/
-    def setColumnLabelName(labelName: String): Unit = {
+    private var predictions: DataFrame = null
+    private var dataset_size: Float =  0
+    private var columnLabelName: String = "label"
+    private var columnPredictionName: String = "prediction"
+
+
+    def getColumnLabelName: String = this.columnLabelName
+    def setColumnLabelName(labelName: String): ClassificationMetricsObject  = {
       this.columnLabelName = labelName
+      this
     }
 
-    def setColumnPredictionName(predictionName: String): Unit = {
+    def getColumnPredictionName: String = columnPredictionName
+    def setColumnPredictionName(predictionName: String): ClassificationMetricsObject = {
       this.columnPredictionName = predictionName
+      this
+    }
+
+    def getPrediction: DataFrame = predictions
+    def fit(predictionsDF: DataFrame): ClassificationMetricsObject = {
+      this.dataset_size = predictionsDF.count().toFloat
+      this.predictions = predictionsDF
+      this
     }
 
     def Accuracy() : Float = {

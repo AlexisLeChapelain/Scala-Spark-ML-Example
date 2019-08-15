@@ -163,9 +163,12 @@ object ML {
 
     //val accuracy = predictionsbis.filter(col("income") === col("prediction")).count().toFloat / predictions.count().toFloat
 
-    val metricsComputer = new ClassificationMetrics(predictionsbis).setColumnLabelName("income")
+    val metricsComputer = new ClassificationMetrics()
+      .setColumnLabelName("income")
 
-    val accuracy = metricsComputer.Accuracy()
+    val metricsLasso = metricsComputer.fit(predictionsbis)
+
+    val accuracy = metricsLasso.Accuracy()
     println("")
     println("Accuracy is:")
     println(accuracy)
@@ -174,7 +177,7 @@ object ML {
     println("Benchmark is:")
     println(benchmark)
 
-    val confusionMatrix = metricsComputer.ConfusionMatrix()
+    val confusionMatrix = metricsLasso.ConfusionMatrix()
     println("")
     println("Confusion Matrix is:")
     println(confusionMatrix)
