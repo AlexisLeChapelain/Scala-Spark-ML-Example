@@ -46,7 +46,7 @@ object ML {
 
     import spark.implicits._
 
-    // Loading sata
+    // Loading data
     val census_data : DataFrame = spark.read.format("csv")
       .option("sep", ",")
       .option("inferSchema", "true")
@@ -58,42 +58,23 @@ object ML {
     println(census_data.count())
     census_data.printSchema()
 
-    println(census_data.filter($"native_country".isNull).count())
-    //print(census_data.filter($"native_country"==="nan").count())
-    census_data.select("native_country").dropDuplicates().show()
 
     // Set list of column
     val target = "income"
     val categorical_variable_string = Array("workclass", "education", "occupation", "relationship", "sex", "marital_status", "native_country")
-    //val categorical_variable_string = Array("workclass", "education" ,"native_country")
     val continuous_variable = Array("year_education", "capital_gain", "capital_loss", "hours_per_week")
 
+    // Drop useless column and rename incorrect names
+    val census_data_corrected: DataFrame = census_data.withColumnRenamed("education.num", "year_education").drop("fnlwgt")
+
     // Set up binary target variable
-    val census_data_with_target = census_data.withColumn("income", when($"income"==="<=50K", 0).otherwise(1))
+    val census_data_with_target: DataFrame = census_data_corrected.withColumn("income", when($"income"==="<=50K", 0).otherwise(1))
 
     // Set value to class "unknown" if not known for categorical variable
-    // Create a function taking a list of column as argument
-    val census_data_without_null = census_data_with_target.withColumn("education", when($"education".isNull, "unknown").otherwise($"education"))
-      .withColumn("workclass", when($"workclass".isNull, "unknown").otherwise($"workclass"))
-      .withColumn("marital_status", when($"marital_status".isNull, "unknown").otherwise($"marital_status"))
-      .withColumn("occupation", when($"occupation".isNull, "unknown").otherwise($"occupation"))
-      .withColumn("relationship", when($"relationship".isNull, "unknown").otherwise($"relationship"))
-      .withColumn("sex", when($"sex".isNull, "unknown").otherwise($"sex"))
-      .withColumn("native_country", when($"native_country".isNull, "unknown").otherwise($"native_country"))
+    val census_data_without_null: DataFrame = categorical_variable_string.foldLeft(census_data_with_target)((df: DataFrame, colname: String) => df.withColumn(colname, when(col(colname).isNull, "unknown").otherwise(col(colname))))
 
-    // Test to do here
-    //println(census_data_without_null.filter($"native_country".isNull).count())
-    //print(census_data.filter($"native_country"==="nan").count())
-    // census_data_without_null.printSchema()
-
-    // Set int column to float + rename column with name like xx.xx + drop useless column
-    val census_data_recast = census_data_without_null
-      .withColumnRenamed("education.num", "year_education")
-      .withColumn("year_education", $"year_education".cast(DoubleType))
-      .withColumn("capital_gain", $"capital_gain".cast(DoubleType))
-      .withColumn("capital_loss", $"capital_loss".cast(DoubleType))
-      .withColumn("hours_per_week", $"hours_per_week".cast(DoubleType))
-      .drop("fnlwgt")
+    // Set int column to float
+    val census_data_recast: DataFrame = continuous_variable.foldLeft(census_data_without_null)((df, colname) => df.withColumn(colname, col(colname).cast(DoubleType)))
 
     // Set value to median if not known for numerical variable
     val imputer = new Imputer()
@@ -113,17 +94,16 @@ object ML {
     // Vector assembling
     val assembler = new VectorAssembler()
       .setInputCols(categorical_variable_string.map(x => x+"_encoded") ++ continuous_variable.map(x => x+"_imputed"))
-      //.setInputCols(categorical_variable_string.map(x => x+"_encoded"))
       .setOutputCol("features")
 
     //val transformation_array =  string_indexer_list ++ Array(imputer) ++ Array(one_hot_encoder_model) ++ Array(assembler)
     val transformation_array = string_indexer_list ++ Array(one_hot_encoder_model, imputer, assembler)
     println(transformation_array)
 
-    val transformation_pipeline = new Pipeline().setStages(transformation_array)
-    val transformation_pipeline_model = transformation_pipeline.fit(census_data_recast)
+    val transformation_pipeline: Pipeline = new Pipeline().setStages(transformation_array)
+    val transformation_pipeline_model: PipelineModel = transformation_pipeline.fit(census_data_recast)
 
-    val transformed_data = transformation_pipeline_model.transform(census_data_recast).select("income", "features")
+    val transformed_data: DataFrame = transformation_pipeline_model.transform(census_data_recast).select("income", "features")
 
     // Test to do here
     transformed_data.printSchema()
@@ -131,9 +111,9 @@ object ML {
 
     // Start ML here
 
-    val Array(trainingData, testData) = transformed_data.randomSplit(Array(0.7, 0.3))
+    val Array(trainingData, testData): Array[DataFrame] = transformed_data.randomSplit(Array(0.7, 0.3))
 
-    val metricsComputer = new ClassificationMetrics().setColumnLabelName("income")
+    val metricsComputer: ClassificationMetrics = new ClassificationMetrics().setColumnLabelName("income")
 
 
     val rf = new RandomForestClassifier()
@@ -210,18 +190,21 @@ object ML {
     val predictionsXGB = XGBmodel.transform(testData)
 
     val metricsXGB = metricsComputer.fit(predictionsXGB)
-/*
+
+    // Test serialization
     XGBmodel.write.overwrite().save("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
     XGBmodel.write.overwrite().save("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
     println("SAVED")
 
     val loaded_model = XGBoostClassificationModel.load("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
     print("LOADED")
-*/
+
+    val model_pred_test = loaded_model.transform(testData)
 
 
-    print("Accuracy XGBoost")
-    print(metricsComputer.Accuracy())
+    println()
+    println("Accuracy XGBoost")
+    println(metricsXGB.Accuracy())
 
     spark.stop()
     println("Done")
