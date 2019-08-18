@@ -128,41 +128,7 @@ object ML {
     val predictions_rf = rf_model.transform(testData)
 
     val metrics_rf = metricsComputer.fit(predictions_rf)
-
-    println("")
-    println("Random forest accuracy is:")
-    println(metrics_rf.Accuracy)
-
-
-    val lasso = new LinearRegression()
-      .setLabelCol("income")
-      .setFeaturesCol("features")
-      .setElasticNetParam(0)
-      .setRegParam(0)
-
-    val model_lasso = lasso.fit(trainingData)
-
-    val predictions_lasso = model_lasso.transform(testData)
-
-    val predictionsbis = predictions_lasso
-      .withColumn("prediction", when($"prediction">0.5, 1).otherwise(0))
-      .withColumn("prediction", $"prediction"cast("int"))
-
-    val metricsLasso = metricsComputer.fit(predictionsbis)
-
-    val accuracy = metricsLasso.Accuracy()
-    println("")
-    println("Lasso accuracy is:")
-    println(accuracy)
-
-    //val benchmark = predictions.filter(col("income") === 1).count().toFloat / predictions.count().toFloat
-    println("Benchmark is:")
-    println(metricsLasso.accuracyBenchmark())
-
-    val confusionMatrix = metricsLasso.ConfusionMatrix()
-    println("")
-    println("Confusion Matrix is:")
-    println(confusionMatrix)
+    println(metrics_rf.classificationReport())
 
 
     // Define parameters of the gradient boosting
@@ -190,21 +156,7 @@ object ML {
     val predictionsXGB = XGBmodel.transform(testData)
 
     val metricsXGB = metricsComputer.fit(predictionsXGB)
-
-    // Test serialization
-    XGBmodel.write.overwrite().save("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
-    XGBmodel.write.overwrite().save("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
-    println("SAVED")
-
-    val loaded_model = XGBoostClassificationModel.load("/Users/az02234/Documents/Personnal_Git/Scala-Spark-ML-Example/src/main/resources/xgbModel")
-    print("LOADED")
-
-    val model_pred_test = loaded_model.transform(testData)
-
-
-    println()
-    println("Accuracy XGBoost")
-    println(metricsXGB.Accuracy())
+    println(metricsXGB.classificationReport())
 
     spark.stop()
     println("Done")
