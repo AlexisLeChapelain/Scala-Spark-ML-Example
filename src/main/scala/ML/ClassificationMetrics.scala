@@ -6,6 +6,11 @@ import org.apache.spark.sql.functions.udf
 import org.apache.spark.ml.linalg.Vector
 import scala.math.sqrt
 
+/*
+* A class to compute metrics, from a matrix of prediction
+* NB : Not a very good practice to include the (potentially large) prediction matrix in the metric object. This could
+* create delays and trouble when the class is serialized and shipped to different executors.
+*/
 object ClassificationMetrics {
 
   type ClassificationMetricsObject = ClassificationMetrics.ClassificationMetrics

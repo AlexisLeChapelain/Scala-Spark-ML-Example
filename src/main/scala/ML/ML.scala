@@ -6,28 +6,15 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.ml.feature.Imputer
 import org.apache.spark.ml.feature.OneHotEncoderEstimator
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.feature.StandardScaler
-import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
-import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
-import org.apache.spark.ml.classification.LogisticRegression
-import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
-import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+import org.apache.spark.ml.classification.RandomForestClassifier
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
-
-import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.regression.LinearRegressionModel
-import org.apache.spark.mllib.regression.LassoWithSGD
-
 import ml.dmlc.xgboost4j.scala.spark.XGBoostClassifier
-import ml.dmlc.xgboost4j.scala.spark.XGBoostClassificationModel
 
 
 object ML {
@@ -45,6 +32,9 @@ object ML {
     val spark = SparkSession.builder.master("local").appName("ML on Scala / Spark").config(sparkConf).getOrCreate()
 
     import spark.implicits._
+
+
+    /******* DATA PROCESSING AND FEATURE ENGINEERING *******/
 
     // Loading data
     val census_data : DataFrame = spark.read.format("csv")
@@ -106,16 +96,21 @@ object ML {
     val transformed_data: DataFrame = transformation_pipeline_model.transform(census_data_recast).select("income", "features")
 
     // Test to do here
+    // Some description of the transformed data
     transformed_data.printSchema()
     transformed_data.show(5)
 
-    // Start ML here
 
+    /******* ML ALGORITHMS *******/
+
+    // Split in train and test sample
     val Array(trainingData, testData): Array[DataFrame] = transformed_data.randomSplit(Array(0.7, 0.3))
 
+    // Set up metric class
     val metricsComputer: ClassificationMetrics = new ClassificationMetrics().setColumnLabelName("income")
 
 
+    // Random forest
     val rf = new RandomForestClassifier()
       .setLabelCol("income")
       .setFeaturesCol("features")
@@ -127,9 +122,12 @@ object ML {
     // Make predictions.
     val predictions_rf = rf_model.transform(testData)
 
+    // Print metrics for random forest
     val metrics_rf = metricsComputer.fit(predictions_rf)
     println(metrics_rf.classificationReport())
 
+
+    // Gradient boosting
 
     // Define parameters of the gradient boosting
     val xgbParam  = Map("booster" -> "gbtree",
@@ -155,6 +153,7 @@ object ML {
 
     val predictionsXGB = XGBmodel.transform(testData)
 
+    // Print metrics for XGB
     val metricsXGB = metricsComputer.fit(predictionsXGB)
     println(metricsXGB.classificationReport())
 
